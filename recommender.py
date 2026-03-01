@@ -2,11 +2,21 @@ import os
 import json
 import requests
 from openai import OpenAI
+from dotenv import load_dotenv
 
-# ── Credentials (loaded from .env via python-dotenv in app.py) ──────────────
-GITHUB_TOKEN        = os.environ["GITHUB_TOKEN"]
-SPOTIFY_CLIENT_ID   = os.environ["SPOTIFY_CLIENT_ID"]
-SPOTIFY_CLIENT_SECRET = os.environ["SPOTIFY_CLIENT_SECRET"]
+# Load .env before anything else
+load_dotenv()
+
+# ── Credentials ──────────────────────────────────────────────────────────────
+GITHUB_TOKEN          = os.environ.get("GITHUB_TOKEN")
+SPOTIFY_CLIENT_ID     = os.environ.get("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.environ.get("SPOTIFY_CLIENT_SECRET")
+
+if not all([GITHUB_TOKEN, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET]):
+    raise EnvironmentError(
+        "Missing credentials. Make sure GITHUB_TOKEN, SPOTIFY_CLIENT_ID, "
+        "and SPOTIFY_CLIENT_SECRET are set in your .env file."
+    )
 
 # ── GitHub AI client (Azure inference endpoint) ──────────────────────────────
 ai_client = OpenAI(
@@ -49,17 +59,19 @@ def search_spotify_track(token: str, title: str, artist: str) -> dict | None:
 
     t = items[0]
     album = t["album"]
+    # some fields are optional depending on the track, so use .get with sensible defaults
     return {
-        "spotify_id":   t["id"],
-        "title":        t["name"],
-        "artist":       ", ".join(a["name"] for a in t["artists"]),
-        "album":        album["name"],
-        "art":          album["images"][0]["url"] if album["images"] else None,
-        "release_date": album["release_date"],
-        "popularity":   t["popularity"],          # 0-100
-        "preview_url":  t["preview_url"],         # 30-sec MP3 or None
-        "spotify_url":  t["external_urls"]["spotify"],
-        "type":         album["album_type"],      # "album" | "single" | "compilation"
+        "spotify_id":   t.get("id"),
+        "title":        t.get("name"),
+        "artist":       ", ".join(a.get("name", "") for a in t.get("artists", [])),
+        "album":        album.get("name"),
+        "art":          album.get("images", [])[0].get("url") if album.get("images") else None,
+        "release_date": album.get("release_date"),
+        # popularity may be missing for some reason; default to 0 so sorting/filters won't crash
+        "popularity":   t.get("popularity", 0),          # 0-100
+        "preview_url":  t.get("preview_url"),         # 30-sec MP3 or None
+        "spotify_url":  t.get("external_urls", {}).get("spotify"),
+        "type":         album.get("album_type"),      # "album" | "single" | "compilation"
     }
 
 
